@@ -18,3 +18,5 @@ For Data Free Quantization, only Cross Lyaer Equalization has been implemented
 python main.py --images-dir <data-path> --ptq cle
 ```
 
+### reference
+MobileNet pretrained model : https://github.com/tonylins/pytorch-mobilenet-v2
