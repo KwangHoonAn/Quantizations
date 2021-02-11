@@ -1,8 +1,8 @@
 # Quantizations
 # Post-Training Quantization for dummy
 Following papers are implemented
-[Quantizing deep convolutional networks forefficient inference: A whitepaper](https://arxiv.org/abs/1806.08342) 
-[Data-Free Quantization Through Weight Equalization and Bias Correction](https://arxiv.org/abs/1906.04721) 
+[Quantizing deep convolutional networks forefficient inference: A whitepaper](https://arxiv.org/abs/1806.08342) <br />
+[Data-Free Quantization Through Weight Equalization and Bias Correction](https://arxiv.org/abs/1906.04721) <br />
 
 | Bitwidth      | Reproduced result | 
 |-----------|---------:|
@@ -10,9 +10,9 @@ Following papers are implemented
 | 8 bitwidth - Cross Layer Equalized|    69.05%    | 
 
 ## Note
-BatchNorm layer has been folded
-Convolution layer and Activations are fused as one operation
-For Data Free Quantization, only Cross Lyaer Equalization has been implemented
+BatchNorm layer has been folded<br />
+Convolution layer and Activations are fused as one operation<br />
+For Data Free Quantization, only Cross Lyaer Equalization has been implemented<br />
 
 ```
 python main.py --images-dir <data-path> --ptq cle
