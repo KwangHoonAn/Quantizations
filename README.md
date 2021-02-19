@@ -7,12 +7,13 @@ Following papers are implemented <br />
 | Bitwidth      | Reproduced result | 
 |-----------|---------:|
 | 8 bitwidth - Batch Norm folding |    0.1%    | 
-| 8 bitwidth - Cross Layer Equalized|    69.05%    | 
+| 8 bitwidth - Cross Layer Scaling|    69.59%    | 
 
 ## Note
 BatchNorm layer has been folded<br />
 Convolution layer and Activations are fused as one operation<br />
-For Data Free Quantization, only Cross Lyaer Equalization has been implemented<br />
+For Data Free Quantization, only Cross Lyaer Scaling has been implemented<br />
+Still not able to reproduce high bias absortion<br />
 
 ```
 python main.py --images-dir <data-path> --ptq cle
