@@ -1,5 +1,31 @@
 import torch
 from torch import nn
+import math
+
+class FuncLSQ(torch.autograd.Function):
+	'''
+	Borrowed code from https://github.com/hustzxd/LSQuantization
+	'''
+	@staticmethod
+	def forward(ctx, weight, alpha, g, Qn, Qp):
+		assert alpha > 0, 'alpha = {}'.format(alpha)
+		ctx.save_for_backward(weight, alpha)
+		ctx.other = g, Qn, Qp
+		q_w = (weight / alpha).round().clamp(Qn, Qp)
+		w_q = q_w * alpha
+		return w_q
+	@staticmethod
+	def backward(ctx, grad_weight):
+		weight, alpha = ctx.saved_tensors
+		q, Qn, Qp = ctx.other
+		q_w = weight / alpha
+		indicate_small = (q_w < Qn).float()
+		indicate_big = (q_w > Qp).float()
+		indicate_middle = torch.ones(indicate_small.shape) - indicate_small - indicate_big
+		grad_alpha = ((indicate_small * Qn + indicate_big * Qp + indicate_middle * (
+                -q_w + q_w.round())) * grad_weight * g).sum().unsqueeze(dim=0)
+		grad_weight = indicate_middle * grad_weight
+		return grad_weight, grad_alpha, None, None, None
 
 class Quantizers(nn.Module):
 	def __init__(self, bw, act_q = True, quantize = False):
@@ -42,7 +68,6 @@ class Quantizers(nn.Module):
 			x_min, x_max = torch.min(x_f), torch.max(x_f)
 
 		self.max_range = torch.max(self.max_range, (x_max - x_min))
-		# self.scale += (x_max - x_min) / float(2**self.n - 1)
 		self.scale = self.max_range / float(2**self.n - 1)
 		if not self.is_symmetric:
 			self.offset = torch.round(-x_min / self.scale)
@@ -99,7 +124,9 @@ class QuantConv(nn.Module):
 						'padding' : self.conv.padding, \
 						'dilation' : self.conv.dilation, \
 						'groups': self.conv.groups}
+		self.activation_function = None
 		self.act_quantizer = Quantizers(bw)
+		self.pre_activation = False
 
 	def batchnorm_folding(self):
 		'''
@@ -134,10 +161,14 @@ class QuantConv(nn.Module):
 		w = self.weight_quantizer(w)
 		return w, b
 
+	def turn_preactivation_on(self):
+		self.pre_activation = True
+
 	def forward(self, x):
 		w, b = self.get_params()
 		out = nn.functional.conv2d(input = x, weight = w, bias = b, **self.kwarg)
-		
+		if self.activation_function and not self.pre_activation:
+			out = self.activation_function(out)
 		out = self.act_quantizer(out)
 		return out
 
@@ -146,6 +177,7 @@ class QuantLinear(nn.Module):
 		super(QuantLinear, self).__init__()
 		self.fc = linear
 		self.weight_quantizer = Quantizers(bw, act_q = False)
+		self.activation_function = None
 		self.act_quantizer = Quantizers(bw)
 
 	def get_params(self):
@@ -160,30 +192,41 @@ class QuantLinear(nn.Module):
 	def forward(self, x):
 		w, b = self.get_params()
 		out = nn.functional.linear(x, w, b)
-
+		if self.activation_function:
+			out = self.activation_function(out)
 		out = self.act_quantizer(out)
 		return out
 
-class QuantActivations(nn.Module):
-	def __init__(self, activation, bw = 8):
-		super(QuantActivations, self).__init__()
+class PassThroughOp(nn.Module):
+	def __init__(self):
+		super(PassThroughOp, self).__init__()
+
+	def forward(self, x):
+		return x
+
+
+class LSQActivations(nn.Module):
+	def __init__(self, activation, scale = None, bw = 8):
+		super(LSQActivations, self).__init__()
 		self.activation_func = activation
-		self.act_quantizer = Quantizers(bw)
+		if scale:
+			self.alpha = torch.nn.Parameter(torch.Tensor(scale))
+		else:
+			self.alpha = torch.nn.Parameter(torch.Tensor(1))
+		self.Qn = 0
+		self.Qp = 2** bw -1
+		self.is_quantize = False
+
+	def set_quantize(self, flag):
+		self.is_quantize = flag
+		
+	def estimate_range(self, flag):
+		self.calibration = flag
 
 	def forward(self, x):
 		x = self.activation_func(x)
-		x = self.act_quantizer(x)
-		return x
-
-class QuantBN(nn.Module):
-	def __init__(self, bn, bw = 8):
-		super(QuantBN, self).__init__()
-		self.bn = bn
-		self.bn_fold = False
-		self.act_quantizer = Quantizers(bw)
-
-	def batchnorm_folding(self):
-		self.bn_fold = True
-
-	def forward(self, x):
+		if self.is_quantize:
+			g = 1.0 / math.sqrt(x.numel() * self.Qp)
+			x_q = FuncLSQ.apply(x, self.alpha, g, self.Qn, self.Qp)
+			return x_q
 		return x
