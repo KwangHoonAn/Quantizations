@@ -159,10 +159,14 @@ def get_loaders(args):
 def blockwise_equalization(args, model):
     # Following setup gives best result.
     conv_layers = cross_layer_equalization(torch.nn.Sequential(model.features[0], model.features[1].conv, model.features[2].conv))
+    if 'hba' in args.ptq:
+        high_bias_absorbing(conv_layers)
     for module in model.features[3:]:
         # Equalizing Residual connetcion wise - See 5.1.1. Cross-layer equalization in the paper
         if isinstance(module, InvertedResidual):
             conv_layers = cross_layer_equalization(module)
+            if 'hba' in args.ptq:
+                high_bias_absorbing(conv_layers)
 
 def get_conv_layers(model):
     conv_layers = []
@@ -178,7 +182,7 @@ def cross_layer_equalization(model):
     Iterate modules until scale value is converged up to 1e-4 magnitude
     '''
     S_history = dict()
-    eps = 1e-6
+    eps = 1e-8
     converged = [False] * (len(conv_layers)-1)
     with torch.no_grad(): 
         while not np.all(converged):
@@ -206,34 +210,36 @@ def cross_layer_equalization(model):
                     else:
                         converged[idx-1] = False
                 s_dim = S.size()[0]
-                prev.weight.data.copy_( prev.weight.data /  S.view(s_dim, 1, 1, 1))
-                prev.bias.data.copy_(prev.bias.data / S)
-
+                prev.weight.data.div_(S.view(s_dim, 1, 1, 1))
+                prev.bias.data.div_(S)
+                prev.gamma.data.div_(S)
+                prev.beta.data.div_(S)
                 # Generic Conv layer
                 if in_channel_curr == out_channel_prev: 
-                    curr.weight.data.copy_( curr.weight.data *  S.view(1, s_dim, 1, 1) )
+                    curr.weight.data.mul_( S.view(1, s_dim, 1, 1) )
                 else:
                     # Depthwise Convolution
-                    curr.weight.data.copy_( curr.weight.data * S.view(s_dim, 1, 1, 1) )
+                    curr.weight.data.mul_( S.view(s_dim, 1, 1, 1) )
                 S_history[idx] = S
     return conv_layers
 
-'''
+
 def high_bias_absorbing(conv_layers):
     for idx in range(1, len(conv_layers)):
         conv1, conv2 = conv_layers[idx-1].conv, conv_layers[idx].conv
         if not conv_layers[idx-1].activation_function:
             continue
         gamma, beta = conv1.gamma.detach(), conv1.beta.detach()
-        c = (beta - 3 * gamma).clamp_(min = 0)
-        conv1.bias.data.copy_(conv1.bias.data - c)
+        c = (beta - 3 * torch.abs(gamma)).clamp_(min = 0)
+        conv1.bias.data.add_(-c)
+        size = conv2.weight.size()
         if conv2.weight.size()[1] == 1:
             w_mul = conv2.weight.sum(dim = [1,2,3]) * c
-            conv2.bias.data.copy_(w_mul + conv2.bias.data)
+            conv2.bias.data.add_(w_mul)
         else:
-            w_mul = conv2.weight.sum(dim = [2,3]).mv(c)
-            conv2.bias.data.copy_(w_mul + conv2.bias.data)
-'''
+            w_mul = conv2.weight.data.mul( c[None,:,None,None] ).sum(dim = [1,2,3])
+            conv2.bias.data.add_(w_mul)
+
 
 def set_quant_mode(quantized):
     def set_precision_mode(module):
@@ -241,12 +247,12 @@ def set_quant_mode(quantized):
             module.set_quantize(quantized)
             module.estimate_range(flag = False)
     return set_precision_mode
-'''
+
 class DataSaverHook:
-'''
-Code borrowed from 
-https://github.com/yhhhli/BRECQ/blob/main/quant/data_utils.py
-'''
+
+# Code borrowed from 
+# https://github.com/yhhhli/BRECQ/blob/main/quant/data_utils.py
+
     def __init__(self, store_input = False, store_output = False, stop_forward = False):
         self.store_input = store_input
         self.store_output = store_output
@@ -287,7 +293,7 @@ def empirical_bias_correction(args, model, eval_func):
             e_x_int8 = model_q(x)
             m_q.weight_quantizer.set_quantize(False)
     exit(1)
-'''
+
 def main():
     args = arguments()
     seed(args)

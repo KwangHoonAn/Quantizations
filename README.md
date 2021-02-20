@@ -8,6 +8,8 @@ Following papers are implemented <br />
 |-----------|---------:|
 | 8 bitwidth - Batch Norm folding |    0.1%    | 
 | 8 bitwidth - Cross Layer Scaling|    69.59%    | 
+| 8 bitwidth - CLS + High bias Absortion | 70.02% |
+
 
 ## Note
 BatchNorm layer has been folded<br />
