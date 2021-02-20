@@ -230,6 +230,12 @@ def high_bias_absorbing(conv_layers):
         if not conv_layers[idx-1].activation_function:
             continue
         gamma, beta = conv1.gamma.detach(), conv1.beta.detach()
+
+        '''
+        Important note :
+        We use beta as mean
+        gamma as standard deviation(non-negative), which means gamma is always >= 0 hence take absolute value
+        '''
         c = (beta - 3 * torch.abs(gamma)).clamp_(min = 0)
         conv1.bias.data.add_(-c)
         size = conv2.weight.size()
