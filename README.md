@@ -1,6 +1,7 @@
 # Quantizations
 # Post-Training Quantization for dummy
 Following papers are implemented in PyTorch (DFQ)
+>>>>>>> main
 [Quantizing deep convolutional networks forefficient inference: A whitepaper](https://arxiv.org/abs/1806.08342) <br />
 [Data-Free Quantization Through Weight Equalization and Bias Correction](https://arxiv.org/abs/1906.04721) <br />
 
