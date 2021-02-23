@@ -1,6 +1,7 @@
 # Quantizations
 # Post-Training Quantization for dummy
-Following papers are implemented <br />
+Following papers are implemented in PyTorch (DFQ)
+>>>>>>> main
 [Quantizing deep convolutional networks forefficient inference: A whitepaper](https://arxiv.org/abs/1806.08342) <br />
 [Data-Free Quantization Through Weight Equalization and Bias Correction](https://arxiv.org/abs/1906.04721) <br />
 
@@ -14,11 +15,10 @@ Following papers are implemented <br />
 ## Note
 BatchNorm layer has been folded<br />
 Convolution layer and Activations are fused as one operation<br />
-For Data Free Quantization, only Cross Lyaer Scaling has been implemented<br />
-Still not able to reproduce high bias absortion<br />
+Cross Layer scaling & High bias fold are implemented <br />
 
 ```
-python main.py --images-dir <data-path> --ptq cle
+python main.py --images-dir <data-path> --ptq cle hba
 ```
 
 ### reference
