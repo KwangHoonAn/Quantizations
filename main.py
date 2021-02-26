@@ -9,15 +9,15 @@ from torchvision import transforms, datasets
 from tqdm import tqdm
 import argparse
 
-def replace_quant_ops(model):
+def replace_quant_ops(args, model):
     prev_module = None
     for child_name, child in model.named_children():
         if isinstance(child, torch.nn.Conv2d):
-            new_op = QuantConv(child)
+            new_op = QuantConv(args, child)
             setattr(model, child_name, new_op)
             prev_module = getattr(model, child_name)
         elif isinstance(child, torch.nn.Linear):
-            new_op = QuantLinear(child)
+            new_op = QuantLinear(args, child)
             setattr(model, child_name, new_op)
             prev_module = getattr(model, child_name)
         elif isinstance(child, (torch.nn.ReLU, torch.nn.ReLU6)):
@@ -27,7 +27,7 @@ def replace_quant_ops(model):
         elif isinstance(child, torch.nn.BatchNorm2d):
             setattr(model, child_name, PassThroughOp())
         else:
-            replace_quant_ops(child)
+            replace_quant_ops(args, child)
 
 def replace_quant_to_brecq_quant(model):
     for child_name, child in model.named_children():
@@ -134,7 +134,8 @@ def arguments():
 
     parser.add_argument('--images-dir',                 help='Imagenet eval image', default='./ILSVRC2012_PyTorch/', type=str)
     parser.add_argument('--seed',                       help='Seed number for reproducibility', type = int, default=0)
-    parser.add_argument('--ptq',                        help='Post Training Quantization techniques to run - Select from CLS / HBA / Bias correction', nargs='+')
+    parser.add_argument('--ptq',                        help='Post Training Quantization techniques to run - Select from CLS / HBA / Bias correction', nargs='+', default = [None])
+    parser.add_argument('--quant-scheme',                 help='Quantization scheme', default='mse', type=str, choices=['mse', 'minmax'])
     
     parser.add_argument('--batch-size',                 help='Data batch size for a model', type = int, default=64)
     parser.add_argument('--num-workers',                help='Number of workers to run data loader in parallel', type = int, default=16)
@@ -159,6 +160,7 @@ def get_loaders(args):
 def blockwise_equalization(args, model):
     # Following setup gives best result.
     conv_layers = cross_layer_equalization(torch.nn.Sequential(model.features[0], model.features[1].conv, model.features[2].conv))
+    
     if 'hba' in args.ptq:
         high_bias_absorbing(conv_layers)
     for module in model.features[3:]:
@@ -227,8 +229,11 @@ def cross_layer_equalization(model):
 def high_bias_absorbing(conv_layers):
     for idx in range(1, len(conv_layers)):
         conv1, conv2 = conv_layers[idx-1].conv, conv_layers[idx].conv
-        if not conv_layers[idx-1].activation_function:
-            continue
+        '''
+        Better result w/o activation constraints
+        '''
+        # if not conv_layers[idx-1].activation_function:
+            # continue
         gamma, beta = conv1.gamma.detach(), conv1.beta.detach()
 
         '''
@@ -253,7 +258,7 @@ def set_quant_mode(quantized):
             module.set_quantize(quantized)
             module.estimate_range(flag = False)
     return set_precision_mode
-
+'''
 class DataSaverHook:
 
 # Code borrowed from 
@@ -299,7 +304,7 @@ def empirical_bias_correction(args, model, eval_func):
             e_x_int8 = model_q(x)
             m_q.weight_quantizer.set_quantize(False)
     exit(1)
-
+'''
 def main():
     args = arguments()
     seed(args)
@@ -324,13 +329,14 @@ def main():
                 module.estimate_range(flag = calibration)
         return estimate_range
 
-    replace_quant_ops(model)
+    replace_quant_ops(args, model)
     model.apply(bn_fold)
 
     if 'cls' in args.ptq:
+        print("CLS")
         blockwise_equalization(args, model)
-    if 'bias_correction' in args.ptq:
-        empirical_bias_correction(args, model, eval_func)
+    # if 'bias_correction' in args.ptq:
+        # empirical_bias_correction(args, model, eval_func)
 
     model.apply(run_calibration(calibration = True))
     eval_func(model, (1024./args.batch_size, True))
