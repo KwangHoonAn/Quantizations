@@ -1,16 +1,20 @@
 # Quantizations
 # Post-Training Quantization for dummy
 Following papers are implemented in PyTorch (DFQ)
->>>>>>> main
 [Quantizing deep convolutional networks forefficient inference: A whitepaper](https://arxiv.org/abs/1806.08342) <br />
 [Data-Free Quantization Through Weight Equalization and Bias Correction](https://arxiv.org/abs/1906.04721) <br />
 
-| Bitwidth      | Reproduced result | 
+| Bitwidth with min-max      | Reproduced result | Paper result | 
 |-----------|---------:|
-| 8 bitwidth - Batch Norm folding |    0.1%    | 
-| 8 bitwidth - Cross Layer Scaling|    69.59%    | 
-| 8 bitwidth - CLS + High bias Absortion | 70.02% |
+| 8 bitwidth - Batch Norm folding |    0.1%    |     0.1%    | 
+| 8 bitwidth - Cross Layer Scaling|    69.59%    |  69.91%    | 
+| 8 bitwidth - CLS + High bias Absortion | 70.02% | 70.92% |
 
+| Bitwidth with Mean Squared Error     | Reproduced result | Paper result | 
+|-----------|---------:|
+| 8 bitwidth - Batch Norm folding |    0.1%    |     0.11%    | 
+| 8 bitwidth - Cross Layer Scaling|    70.12%    |  69.91%    | 
+| 8 bitwidth - CLS + High bias Absortion | 70.36% | 70.92% |
 
 ## Note
 BatchNorm layer has been folded<br />
