@@ -258,53 +258,103 @@ def set_quant_mode(quantized):
             module.set_quantize(quantized)
             module.estimate_range(flag = False)
     return set_precision_mode
+
+
+def run_calibration(calibration):
+    def estimate_range(module):
+        if isinstance(module, Quantizers):
+            module.estimate_range(flag = calibration)
+    return estimate_range
+
 '''
-class DataSaverHook:
-
-# Code borrowed from 
-# https://github.com/yhhhli/BRECQ/blob/main/quant/data_utils.py
-
-    def __init__(self, store_input = False, store_output = False, stop_forward = False):
-        self.store_input = store_input
-        self.store_output = store_output
-        self.stop_forward = stop_forward
-
-        self.input_store = None
-        self.output_store = None
-
-    def __call__(self, module, input_batch, output_batch):
-        if self.store_inoput:
-            self.input_store = input_batch
-        if self.store_output:
-            self.output_store = output_batch
-        if self.stop_forward:
-            raise StopForwardException
-
-class GetInpOut:
-    def __init__(self, model):
-        self.model = model
-    def __call__(self, x, layer):
-        self.model.eval()
-
-        handler = layer.register_forward_hook(self.data_saver)
-        handler.remove()
-
-
-def empirical_bias_correction(args, model, eval_func):
-    import copy
-    model_q = copy.deepcopy(model)
-    fp_inout = GetInpOut(model)
-    q_inout = GetInpOut(model_q)
-    for m, m_q in zip(model.modules(), model_q.modules()):
-        if isinstance(m, QuantConv):
-            m_q.turn_preactivation_on()
-            m_q.weight_quantizer.set_quantize(True)
-            m_q.act_quantizer.set_quantize(False)
-            e_x_fp32 = model(x)
-            e_x_int8 = model_q(x)
-            m_q.weight_quantizer.set_quantize(False)
-    exit(1)
+Code borrowed from https://github.com/yhhhli/BRECQ/blob/main/quant/data_utils.py
 '''
+# class StopForwardException(Exception):
+#     """
+#     Used to throw and catch an exception to stop traversing the graph
+#     """
+#     pass
+
+
+# class DataSaverHook:
+#     """
+#     Forward hook that stores the input and output of a block
+#     """
+#     def __init__(self, store_input=False, store_output=False, stop_forward=False):
+#         self.store_input = store_input
+#         self.store_output = store_output
+#         self.stop_forward = stop_forward
+
+#         self.input_store = None
+#         self.output_store = None
+
+#     def __call__(self, module, input_batch, output_batch):
+#         if self.store_input:
+#             self.input_store = input_batch
+#         if self.store_output:
+#             self.output_store = output_batch
+#         if self.stop_forward:
+#             raise StopForwardException
+
+
+# class GetLayerInpOut:
+#     def __init__(self, model: QuantModel, layer: Union[QuantModule, BaseQuantBlock],
+#                  device: torch.device, asym: bool = False, act_quant: bool = False):
+#         self.model = model
+#         self.layer = layer
+#         self.asym = asym
+#         self.device = device
+#         self.act_quant = act_quant
+#         self.data_saver = DataSaverHook(store_input=True, store_output=True, stop_forward=True)
+
+#     def __call__(self, model_input):
+#         self.model.eval()
+#         self.model.set_quant_state(False, False)
+
+#         handle = self.layer.register_forward_hook(self.data_saver)
+#         with torch.no_grad():
+#             try:
+#                 _ = self.model(model_input.to(self.device))
+#             except StopForwardException:
+#                 pass
+
+#             if self.asym:
+#                 # Recalculate input with network quantized
+#                 self.data_saver.store_output = False
+#                 self.model.set_quant_state(weight_quant=True, act_quant=self.act_quant)
+#                 try:
+#                     _ = self.model(model_input.to(self.device))
+#                 except StopForwardException:
+#                     pass
+#                 self.data_saver.store_output = True
+
+#         handle.remove()
+
+#         self.model.set_quant_state(False, False)
+#         self.layer.set_quant_state(True, self.act_quant)
+#         self.model.train()
+
+#         return self.data_saver.input_store[0].detach(), self.data_saver.output_store.detach()
+
+
+# def empirical_bias_correction(args, model, eval_func):
+#     import copy
+#     model_q = copy.deepcopy(model)
+#     model_q.apply(run_calibration(calibration = True))
+#     eval_func(model, (1024./args.batch_size, True))
+#     fp_inout = GetInpOut(model)
+#     q_inout = GetInpOut(model_q)
+
+#     for m, m_q in zip(model.modules(), model_q.modules()):
+#         if isinstance(m, QuantConv):
+#             m_q.turn_preactivation_on()
+#             m_q.weight_quantizer.set_quantize(True)
+#             m_q.act_quantizer.set_quantize(False)
+#             e_x_fp32 = model(x)
+#             e_x_int8 = model_q(x)
+#             m_q.weight_quantizer.set_quantize(False)
+#     exit(1)
+
 def main():
     args = arguments()
     seed(args)
@@ -323,11 +373,6 @@ def main():
         if isinstance(module, (QuantConv)):
             module.batchnorm_folding()
 
-    def run_calibration(calibration):
-        def estimate_range(module):
-            if isinstance(module, Quantizers):
-                module.estimate_range(flag = calibration)
-        return estimate_range
 
     replace_quant_ops(args, model)
     model.apply(bn_fold)
